@@ -1,0 +1,20 @@
+-- Drop triggers for automatically updating the 'updated_at' field
+DROP TRIGGER IF EXISTS update_user_updated_at ON users;
+
+
+-- Drop trigger functions
+DROP FUNCTION IF EXISTS update_updated_at_users;
+
+-- Drop indexes
+DROP INDEX IF EXISTS idx_users_email;
+
+-- Drop the user_status type (if no dependent tables)
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN
+        DROP TYPE user_status;
+    END IF;
+END $$;
+
+-- Drop tables
+DROP TABLE IF EXISTS users CASCADE;

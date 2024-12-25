@@ -1,0 +1,39 @@
+# Go binary files
+/bin/
+/out/
+
+# Go workspace settings
+.idea/
+/.vscode/
+
+# Dependency directories
+/vendor/
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Database files
+*.db
+
+# Environment files
+.env
+
+# IDE and editor specific files
+*.swp
+*.swo
+
+# Log files
+*.log
+
+# Docker related files
+docker-compose.override.yml
+
+# OS generated files
+.DS_Store
+Thumbs.db

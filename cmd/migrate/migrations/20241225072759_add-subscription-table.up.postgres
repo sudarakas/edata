@@ -1,0 +1,28 @@
+-- Create subscriptions table (Data plans available)
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,           -- Name of the subscription plan
+    description TEXT,                     -- Description of the plan
+    price DECIMAL(10, 2) NOT NULL,        -- Price of the plan
+    data_limit INT NOT NULL,              -- Data limit for the plan (in KB)
+    validity_period INT NOT NULL,         -- Validity in days
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create an index on subscription name to optimize lookups
+CREATE INDEX IF NOT EXISTS idx_subscriptions_name ON subscriptions (name);
+
+-- Add trigger for automatically updating the 'updated_at' field on any record change
+CREATE OR REPLACE FUNCTION update_updated_at_subscriptions() 
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_subscription_updated_at
+BEFORE UPDATE ON subscriptions
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_subscriptions();
