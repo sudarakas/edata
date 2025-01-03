@@ -73,8 +73,8 @@ func TestUserServiceHandlers(t *testing.T) {
 type mockUserStore struct {
 }
 
-func (m *mockUserStore) CreateUser(ctx context.Context, user types.User) error {
-	return nil
+func (m *mockUserStore) CreateUser(ctx context.Context, user types.User) (types.User, error) {
+	return types.User{}, nil
 }
 
 func (m *mockUserStore) GetUserByEmail(ctx context.Context, email string) (types.User, error) {

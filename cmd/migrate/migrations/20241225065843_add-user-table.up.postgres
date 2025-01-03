@@ -3,7 +3,8 @@ CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended');
 
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    firstName VARCHAR(255) NOT NULL,
+    lastName VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,        -- Store hashed password, never plaintext
     status user_status NOT NULL DEFAULT 'active',

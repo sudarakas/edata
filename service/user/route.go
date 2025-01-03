@@ -46,12 +46,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Check if the user exists
-	existingUser, err := h.store.GetUserByEmail(ctx, payload.Email)
-	if err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, err)
-		return
-	}
-
+	existingUser, _ := h.store.GetUserByEmail(ctx, payload.Email)
 	if existingUser.ID != "" {
 		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("user already exists"))
 		return
@@ -75,11 +70,20 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store the user
-	if err := h.store.CreateUser(ctx, user); err != nil {
+	newUser, err := h.store.CreateUser(ctx, user)
+	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	// Return success message
-	utils.WriteSuccess(w, http.StatusCreated, map[string]string{"message": "user created successfully"})
+	utils.WriteSuccess(w, http.StatusCreated, map[string]interface{}{
+		"message": "user created successfully",
+		"user": map[string]interface{}{
+			"firstName": newUser.FirstName,
+			"lastName":  newUser.LastName,
+			"email":     newUser.Email,
+		},
+	})
+
 }
