@@ -25,6 +25,47 @@ func (h *Handler) RegisterRoute(router *mux.Router) {
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	// Get the payload data
+	var payload types.LoginUserPayLoad
+	if err := utils.ParseJSON(r, &payload); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// Valid the payload data
+	if err := utils.Validate.Struct(payload); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid payload: %v", err))
+		return
+	}
+
+	// Use context from the request
+	ctx := r.Context()
+
+	// Check if the user exists
+	user, err := h.store.GetUserByEmail(ctx, payload.Email)
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Check if the password is correct
+	if !auth.CheckPasswordHash(payload.Password, user.Password) {
+		utils.WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid email or password"))
+		return
+	}
+
+	// Generate the token
+	token, err := auth.GenerateJWT(user)
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Return success message
+	utils.WriteSuccess(w, http.StatusOK, map[string]interface{}{
+		"message": "login successful",
+		"token":   token,
+	})
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
