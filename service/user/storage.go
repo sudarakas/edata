@@ -15,6 +15,9 @@ import (
 var (
 	ErrUserNotFound   = errors.New("user not found")
 	ErrDuplicateEmail = errors.New("email already exists")
+	ErrUpdateFailed   = errors.New("failed to update user")
+	ErrDeleteFailed   = errors.New("failed to delete user")
+	ErrUserDeleted    = errors.New("user is deleted, please contact support")
 )
 
 type Store struct {
@@ -23,6 +26,8 @@ type Store struct {
 	createUserStmt     *sql.Stmt
 	getUserByEmailStmt *sql.Stmt
 	getUserByIDStmt    *sql.Stmt
+	updateUserStmt     *sql.Stmt
+	deleteUserStmt     *sql.Stmt
 }
 
 // Queries
@@ -44,7 +49,8 @@ const (
 			email, 
 			password, 
 			created_at, 
-			updated_at 
+			updated_at,
+			deleted_at
 		FROM users 
 		WHERE email = $1`
 
@@ -56,9 +62,26 @@ const (
 			email, 
 			password, 
 			created_at, 
-			updated_at 
+			updated_at,
+			deleted_at
 		FROM users 
 		WHERE id = $1`
+
+	updateUserQuery = `
+		UPDATE users
+		SET
+			firstName = $1,
+			lastName = $2,
+			email = $3,
+			updated_at = NOW()
+		WHERE id = $4
+		RETURNING updated_at`
+
+	deleteUserQuerySoft = `
+	UPDATE users 
+	SET 
+		deleted_at = NOW() 
+	WHERE id = $1`
 )
 
 // Initializes the Store with prepared statements
@@ -93,6 +116,16 @@ func (s *Store) prepareStatements() error {
 		return fmt.Errorf("failed to prepare get user by ID statement: %w", err)
 	}
 
+	s.updateUserStmt, err = s.db.Prepare(updateUserQuery)
+	if err != nil {
+		return fmt.Errorf("failed to prepare update user statement: %w", err)
+	}
+
+	s.deleteUserStmt, err = s.db.Prepare(deleteUserQuerySoft)
+	if err != nil {
+		return fmt.Errorf("failed to prepare delete user statement: %w", err)
+	}
+
 	return nil
 }
 
@@ -113,6 +146,7 @@ func (s *Store) Close() error {
 	if len(errs) > 0 {
 		return fmt.Errorf("failed to close statements: %v", errs)
 	}
+
 	return nil
 }
 
@@ -139,6 +173,8 @@ func (s *Store) CreateUser(ctx context.Context, user types.User) (types.User, er
 // GetUserByEmail retrieves a user by their email address
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (types.User, error) {
 	var user types.User
+	var deletedAt sql.NullTime
+
 	err := s.getUserByEmailStmt.QueryRowContext(ctx, email).Scan(
 		&user.ID,
 		&user.FirstName,
@@ -147,6 +183,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (types.User, e
 		&user.Password,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&deletedAt,
 	)
 
 	if err != nil {
@@ -156,12 +193,23 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (types.User, e
 		return types.User{}, fmt.Errorf("failed to get user by email %s: %w", email, err)
 	}
 
+	// Check if user is not deleted
+	if deletedAt.Valid {
+		// If deletedAt is valid, the user has been deleted
+		return types.User{}, ErrUserDeleted
+	}
+
+	// Convert sql.NullTime to time.Time if it's not NULL
+	user.DeletedAt = deletedAt.Time
+
 	return user, nil
 }
 
 // GetUserByID retrieves a user by their ID
 func (s *Store) GetUserByID(ctx context.Context, id string) (types.User, error) {
 	var user types.User
+	var deletedAt sql.NullTime
+
 	err := s.getUserByIDStmt.QueryRowContext(ctx, id).Scan(
 		&user.ID,
 		&user.FirstName,
@@ -170,6 +218,7 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (types.User, error) 
 		&user.Password,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.DeletedAt,
 	)
 
 	if err != nil {
@@ -179,7 +228,45 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (types.User, error) 
 		return types.User{}, fmt.Errorf("failed to get user by id %s: %w", id, err)
 	}
 
+	// Check if user is not deleted
+	if deletedAt.Valid {
+		// If deletedAt is valid, the user has been deleted
+		return types.User{}, ErrUserDeleted
+	}
+
+	// Convert sql.NullTime to time.Time if it's not NULL
+	user.DeletedAt = deletedAt.Time
+
 	return user, nil
+}
+
+// UpdateUser updates a user's details
+func (s *Store) UpdateUser(ctx context.Context, user types.User) (types.User, error) {
+	err := s.updateUserStmt.QueryRowContext(
+		ctx,
+		user.FirstName,
+		user.LastName,
+		user.Email,
+		user.ID,
+	).Scan(&user.UpdatedAt)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return types.User{}, ErrUserNotFound
+		}
+		return types.User{}, ErrUpdateFailed
+	}
+
+	return user, nil
+}
+
+// DeleteUser removes a user from the database
+func (s *Store) DeleteUser(ctx context.Context, id string) error {
+	_, err := s.deleteUserStmt.ExecContext(ctx, id)
+	if err != nil {
+		return ErrDeleteFailed
+	}
+	return nil
 }
 
 // isPgDuplicateKeyError checks if the error is a PostgreSQL unique violation

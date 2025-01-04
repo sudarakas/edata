@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/sudarakas/edata/config"
@@ -9,6 +11,10 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 )
+
+type contextKey string
+
+const ClaimsKey contextKey = "claims"
 
 func GenerateJWT(user types.User) (string, error) {
 	expirationTime := time.Now().Add(6 * time.Hour)
@@ -62,7 +68,6 @@ func ValidateJWT(tokenString string) (jwt.MapClaims, error) {
 			} else {
 				// Convert exp to time and log
 				expiration := time.Unix(int64(expTime), 0)
-				log.Printf("Expiration Time: %v", expiration)
 
 				// Check if the token has expired
 				if time.Now().After(expiration) {
@@ -82,4 +87,28 @@ func ValidateJWT(tokenString string) (jwt.MapClaims, error) {
 	// Handle invalid token
 	log.Printf("Invalid JWT Token: %v", err)
 	return nil, jwt.ErrInvalidKey
+}
+
+// Middleware to authenticate requests with JWT
+func WithJWTAuth(next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenString := r.Header.Get("Authorization")
+		if tokenString == "" || len(tokenString) < 7 || tokenString[:7] != "Bearer " {
+			http.Error(w, "Invalid Authorization header", http.StatusUnauthorized)
+			return
+		}
+
+		// Remove "Bearer " prefix
+		tokenString = tokenString[7:]
+
+		claims, err := ValidateJWT(tokenString)
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		// Add claims to the request context
+		ctx := context.WithValue(r.Context(), ClaimsKey, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
