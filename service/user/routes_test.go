@@ -84,3 +84,11 @@ func (m *mockUserStore) GetUserByEmail(ctx context.Context, email string) (types
 func (m *mockUserStore) GetUserByID(ctx context.Context, id string) (types.User, error) {
 	return types.User{}, nil
 }
+
+func (m *mockUserStore) UpdateUser(ctx context.Context, user types.User) (types.User, error) {
+	return types.User{}, nil
+}
+
+func (m *mockUserStore) DeleteUser(ctx context.Context, id string) error {
+	return nil
+}
