@@ -26,6 +26,7 @@ func (h *Handler) RegisterRoute(router *mux.Router) {
 	router.Handle("/user", auth.WithJWTAuth(http.HandlerFunc(h.handleGetUserByCondition))).Methods("GET")
 	router.Handle("/user", auth.WithJWTAuth(http.HandlerFunc(h.handleUpdateUser))).Methods("PATCH")
 	router.Handle("/user", auth.WithJWTAuth(http.HandlerFunc(h.handleDeleteUser))).Methods("DELETE")
+	router.Handle("/user/change-password", auth.WithJWTAuth(http.HandlerFunc(h.handleGetUser))).Methods("PATCH")
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +125,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Return success message
 	utils.WriteSuccess(w, http.StatusCreated, map[string]interface{}{
 		"message": "user created successfully",
-		"user": map[string]interface{}{
+		"data": map[string]interface{}{
 			"firstName": newUser.FirstName,
 			"lastName":  newUser.LastName,
 			"email":     newUser.Email,
@@ -313,5 +314,72 @@ func (h *Handler) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Return success message
 	utils.WriteSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "user deleted successfully",
+	})
+}
+
+func (h *Handler) changeUserPassword(w http.ResponseWriter, r *http.Request) {
+	// Get claims from the context
+	claims, ok := r.Context().Value(auth.ClaimsKey).(jwt.MapClaims)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Extract user ID from claims
+	userID, ok := claims["id"].(string)
+	if !ok {
+		http.Error(w, "Invalid token claims", http.StatusUnauthorized)
+		return
+	}
+
+	// Use context from the request
+	ctx := r.Context()
+
+	// Retrieve the user using the ID
+	user, err := h.store.GetUserByID(ctx, userID)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Get the payload data
+	var payload types.ChangePasswordPayLoad
+	if err := utils.ParseJSON(r, &payload); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// Valid the payload data
+	if err := utils.Validate.Struct(payload); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid payload: %v", err))
+		return
+	}
+
+	// Check if the old password is correct
+	if !auth.CheckPasswordHash(payload.OldPassword, user.Password) {
+		utils.WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid old password"))
+		return
+	}
+
+	// Hash the new password
+	hashedPassword, err := auth.HashPassword(payload.NewPassword)
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Update the user's password
+	user.Password = hashedPassword
+
+	// Update the user
+	err = h.store.ChangePassword(ctx, user)
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Return success message
+	utils.WriteSuccess(w, http.StatusOK, map[string]interface{}{
+		"message": "password changed successfully",
 	})
 }
