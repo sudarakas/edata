@@ -28,6 +28,7 @@ type Store struct {
 	getUserByIDStmt    *sql.Stmt
 	updateUserStmt     *sql.Stmt
 	deleteUserStmt     *sql.Stmt
+	changePasswordStmt *sql.Stmt
 }
 
 // Queries
@@ -82,6 +83,14 @@ const (
 	SET 
 		deleted_at = NOW() 
 	WHERE id = $1`
+
+	changePasswordStmt = `
+		UPDATE users
+		SET
+			password = $1,
+			updated_at = NOW()
+		WHERE id = $2
+		RETURNING updated_at`
 )
 
 // Initializes the Store with prepared statements
@@ -126,6 +135,11 @@ func (s *Store) prepareStatements() error {
 		return fmt.Errorf("failed to prepare delete user statement: %w", err)
 	}
 
+	s.changePasswordStmt, err = s.db.Prepare(changePasswordStmt)
+	if err != nil {
+		return fmt.Errorf("failed to prepare change password statement: %w", err)
+	}
+
 	return nil
 }
 
@@ -141,6 +155,15 @@ func (s *Store) Close() error {
 	}
 	if err := s.getUserByIDStmt.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("close get user by ID stmt: %w", err))
+	}
+	if err := s.updateUserStmt.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close update user stmt: %w", err))
+	}
+	if err := s.deleteUserStmt.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close delete user stmt: %w", err))
+	}
+	if err := s.changePasswordStmt.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close change password stmt: %w", err))
 	}
 
 	if len(errs) > 0 {
@@ -265,6 +288,15 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	_, err := s.deleteUserStmt.ExecContext(ctx, id)
 	if err != nil {
 		return ErrDeleteFailed
+	}
+	return nil
+}
+
+// ChangePassword updates a user's password
+func (s *Store) ChangePassword(ctx context.Context, user types.User) error {
+	_, err := s.changePasswordStmt.ExecContext(ctx, user.Password, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to change password: %w", err)
 	}
 	return nil
 }

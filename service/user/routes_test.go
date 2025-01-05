@@ -92,3 +92,7 @@ func (m *mockUserStore) UpdateUser(ctx context.Context, user types.User) (types.
 func (m *mockUserStore) DeleteUser(ctx context.Context, id string) error {
 	return nil
 }
+
+func (m *mockUserStore) ChangePassword(ctx context.Context, user types.User) error {
+	return nil
+}
