@@ -1,39 +1,140 @@
 package api
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/sudarakas/edata/service/subscription"
 	"github.com/sudarakas/edata/service/user"
 )
 
-type APISERVER struct {
-	addr string
-	db   *sql.DB
+// Config holds server configuration
+type Config struct {
+	Addr         string
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	IdleTimeout  time.Duration
 }
 
-func NewAPISERVER(addr string, db *sql.DB) *APISERVER {
-	return &APISERVER{
-		addr: addr,
-		db:   db,
+// APIServer represents the API server
+type APIServer struct {
+	config Config
+	db     *sql.DB
+	router *mux.Router
+	server *http.Server
+}
+
+// NewAPIServer creates a new instance of APIServer
+func NewAPIServer(config Config, db *sql.DB) *APIServer {
+	if db == nil {
+		panic("database connection cannot be nil")
+	}
+
+	router := mux.NewRouter()
+
+	return &APIServer{
+		config: config,
+		db:     db,
+		router: router,
+		server: &http.Server{
+			Addr:         config.Addr,
+			Handler:      router,
+			ReadTimeout:  config.ReadTimeout,
+			WriteTimeout: config.WriteTimeout,
+			IdleTimeout:  config.IdleTimeout,
+		},
 	}
 }
 
-func (s *APISERVER) Run() error {
-	router := mux.NewRouter()
-	subRouter := router.PathPrefix("/api/v1").Subrouter()
+// setupRoutes initializes all route handlers
+func (s *APIServer) setupRoutes() error {
+	subRouter := s.router.PathPrefix("/api/v1").Subrouter()
 
 	userStore, err := user.NewStore(s.db)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to create user store: %w", err)
+	}
+
+	subscriptionStore, err := subscription.NewStore(s.db)
+	if err != nil {
+		return fmt.Errorf("failed to create subscription store: %w", err)
 	}
 
 	userHandler := user.NewHandler(userStore)
 	userHandler.RegisterRoute(subRouter)
 
-	log.Println("Listening on", s.addr)
+	subscriptionHandler := subscription.NewHandler(subscriptionStore)
+	subscriptionHandler.RegisterRoutes(subRouter)
 
-	return http.ListenAndServe(s.addr, router)
+	s.router.HandleFunc("/health", s.healthCheck()).Methods("GET")
+
+	return nil
+}
+
+// Run starts the server and handles graceful shutdown
+func (s *APIServer) Run() error {
+	if err := s.setupRoutes(); err != nil {
+		return fmt.Errorf("failed to setup routes: %w", err)
+	}
+
+	// Channel to listen for errors coming from the listener.
+	serverErrors := make(chan error, 1)
+
+	// Start the service listening for requests.
+	go func() {
+		log.Printf("API listening on %s", s.config.Addr)
+		serverErrors <- s.server.ListenAndServe()
+	}()
+
+	// Channel to listen for an interrupt or terminate signal from the OS.
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	// Blocking main and waiting for shutdown.
+	select {
+	case err := <-serverErrors:
+		return fmt.Errorf("server error: %w", err)
+
+	case sig := <-shutdown:
+		log.Printf("start shutdown due to %v signal", sig)
+
+		// Give outstanding requests a deadline for completion.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Asking listener to shut down and shed load.
+		if err := s.server.Shutdown(ctx); err != nil {
+			// Error from closing listeners, or context timeout:
+			s.server.Close()
+			return fmt.Errorf("could not stop server gracefully: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// HealthCheck returns a simple health check handler
+func (s *APIServer) healthCheck() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	}
+}
+
+// DefaultConfig returns a default server configuration
+func DefaultConfig() Config {
+	return Config{
+		Addr:         ":8080",
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
 }

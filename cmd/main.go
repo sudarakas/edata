@@ -24,7 +24,9 @@ func main() {
 		log.Println("Connected to PostgreSQL database")
 	}
 
-	server := api.NewAPISERVER(":8080", postgresDB)
+	config := api.DefaultConfig()
+	server := api.NewAPIServer(config, postgresDB)
+
 	if err := server.Run(); err != nil {
 		log.Fatal(err)
 	}
