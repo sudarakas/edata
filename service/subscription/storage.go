@@ -207,3 +207,115 @@ func isPgDuplicateKeyError(err error) bool {
 	}
 	return pqErr.Code == "23505" // unique_violation error code
 }
+
+// GetSubscriptionByID retrieves a subscription by its ID
+func (s *Store) GetSubscriptionByID(ctx context.Context, id int) (types.Subscription, error) {
+	var subscription types.Subscription
+	var deletedAt sql.NullTime
+
+	err := s.getSubscriptionById.QueryRow(id).Scan(
+		&subscription.SubscriptionID,
+		&subscription.Code,
+		&subscription.Plan,
+		&subscription.Description,
+		&subscription.Price,
+		&subscription.DataLimit,
+		&subscription.Validity,
+		&subscription.CreatedAt,
+		&subscription.UpdatedAt,
+		&deletedAt,
+	)
+
+	// Check if the subscription is not deleted
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.Subscription{}, ErrNotFound
+		}
+		return types.Subscription{}, fmt.Errorf("failed to get subscription by ID: %w", err)
+	}
+
+	// Check if the subscription is not deleted
+	if deletedAt.Valid {
+		// If deletedAt is valid, the subscription has been deleted
+		return types.Subscription{}, ErrNotFound
+	}
+
+	return subscription, nil
+}
+
+// GetSubscriptionByCode retrieves a subscription by its code
+func (s *Store) GetSubscriptionByCode(ctx context.Context, code string) (types.Subscription, error) {
+	var subscription types.Subscription
+	var deletedAt sql.NullTime
+
+	err := s.getSubscriptionByCodeStmt.QueryRow(code).Scan(
+		&subscription.SubscriptionID,
+		&subscription.Code,
+		&subscription.Plan,
+		&subscription.Description,
+		&subscription.Price,
+		&subscription.DataLimit,
+		&subscription.Validity,
+		&subscription.CreatedAt,
+		&subscription.UpdatedAt,
+		&deletedAt,
+	)
+
+	// Check if the subscription is not deleted
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.Subscription{}, ErrNotFound
+		}
+		return types.Subscription{}, fmt.Errorf("failed to get subscription by code: %w", err)
+	}
+
+	// Check if the subscription is not deleted
+	if deletedAt.Valid {
+		// If deletedAt is valid, the subscription has been deleted
+		return types.Subscription{}, ErrNotFound
+	}
+
+	return subscription, nil
+}
+
+// Update the subscription
+func (s *Store) UpdateSubscription(ctx context.Context, subscription types.Subscription) (types.Subscription, error) {
+	err := s.updateSubscriptionStmt.QueryRow(
+		subscription.Code,
+		subscription.Plan,
+		subscription.Description,
+		subscription.Price,
+		subscription.DataLimit,
+		subscription.Validity,
+		subscription.SubscriptionID,
+	).Scan(
+		&subscription.SubscriptionID,
+		&subscription.Code,
+		&subscription.Plan,
+		&subscription.Description,
+		&subscription.Price,
+		&subscription.DataLimit,
+		&subscription.Validity,
+		&subscription.CreatedAt,
+		&subscription.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.Subscription{}, ErrNotFound
+		}
+		return types.Subscription{}, fmt.Errorf("failed to update subscription: %w", err)
+	}
+
+	return subscription, nil
+}
+
+// Delete the subscription
+func (s *Store) DeleteSubscription(ctx context.Context, id string) error {
+	_, err := s.deleteSubscriptionStmt.Exec(id)
+	if err != nil {
+		return fmt.Errorf("failed to delete subscription: %w", err)
+	}
+
+	return nil
+}
