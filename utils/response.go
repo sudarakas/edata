@@ -18,6 +18,10 @@ func ParseJSON(r *http.Request, payload any) error {
 	return json.NewDecoder((r.Body)).Decode(payload)
 }
 
+func ValidatePayload(payload any) error {
+	return Validate.Struct(payload)
+}
+
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -10,9 +10,9 @@ type SubscriptionStore interface {
 	CreateSubscription(ctx context.Context, subscription Subscription) (Subscription, error)
 	// GetAllSubscriptions(ctx context.Context) ([]Subscription, error)
 	// GetSubscriptionByID(ctx context.Context, id string) (Subscription, error)
-	// GetSubscriptionByCode(ctx context.Context, code string) (Subscription, error)
-	// UpdateSubscription(ctx context.Context, subscription Subscription) (Subscription, error)
-	// DeleteSubscription(ctx context.Context, userID string) error
+	GetSubscriptionByCode(ctx context.Context, code string) (Subscription, error)
+	UpdateSubscription(ctx context.Context, subscription Subscription) (Subscription, error)
+	DeleteSubscription(ctx context.Context, userID string) error
 	// FilterSubscriptions(ctx context.Context, filter SubscriptionFilter) ([]Subscription, error)
 }
 
@@ -52,12 +52,12 @@ type CreateSubscriptionPayLoad struct {
 }
 
 type UpdateSubscriptionPayLoad struct {
-	Code        string  `json:"code" validate:"required,min=2,max=100"`
-	Plan        string  `json:"name" validate:"required,min=2,max=100"`
-	Description string  `json:"description" validate:"required,min=2,max=1000"`
-	Price       float64 `json:"price" validate:"required,min=0"`
-	DataLimit   int     `json:"data_limit" validate:"required,min=0"`
-	Validity    int     `json:"validity_period" validate:"required,min=0"`
+	Code        string  `json:"code" validate:"required,min=2,max=100,omitempty"`
+	Plan        string  `json:"name" validate:"required,min=2,max=100,omitempty"`
+	Description string  `json:"description" validate:"required,min=2,max=1000,omitempty"`
+	Price       float64 `json:"price" validate:"required,min=0,omitempty"`
+	DataLimit   int     `json:"data_limit" validate:"required,min=0,omitempty"`
+	Validity    int     `json:"validity_period" validate:"required,min=0,omitempty"`
 }
 
 type DeleteSubscriptionPayLoad struct {
