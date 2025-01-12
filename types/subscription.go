@@ -8,7 +8,8 @@ import (
 // Store
 type SubscriptionStore interface {
 	CreateSubscription(ctx context.Context, subscription Subscription) (Subscription, error)
-	// GetAllSubscriptions(ctx context.Context) ([]Subscription, error)
+	GetAllSubscriptions(ctx context.Context, sort string, limit, offset int) ([]Subscription, error)
+	GetAllSubscriptionsCount(ctx context.Context) (int, error)
 	// GetSubscriptionByID(ctx context.Context, id string) (Subscription, error)
 	GetSubscriptionByCode(ctx context.Context, code string) (Subscription, error)
 	UpdateSubscription(ctx context.Context, subscription Subscription) (Subscription, error)

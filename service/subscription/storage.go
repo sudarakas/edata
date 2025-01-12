@@ -23,7 +23,8 @@ type Store struct {
 	createSubscriptionStmt    *sql.Stmt
 	getSubscriptionById       *sql.Stmt
 	getSubscriptionByCodeStmt *sql.Stmt
-	GetAllSubscriptionsStmt   *sql.Stmt
+	getAllSubscriptionsStmt   *sql.Stmt
+	getAllSubscriptionsCount  *sql.Stmt
 	updateSubscriptionStmt    *sql.Stmt
 	deleteSubscriptionStmt    *sql.Stmt
 	filterSubscriptions       *sql.Stmt
@@ -47,6 +48,12 @@ const (
 		SELECT id, code, name, description, price, data_limit, validity_period AS validity, created_at, updated_at
 		FROM subscriptions
 		WHERE code = $1
+	`
+
+	getAllSubscriptionsCountQuery = `
+		SELECT COUNT(*)
+		FROM subscriptions
+		WHERE deleted_at IS NULL
 	`
 
 	getAllSubscriptionsQuery = `
@@ -119,8 +126,11 @@ func (s *Store) prepareStatements() error {
 	if s.getSubscriptionByCodeStmt, err = s.db.Prepare(getSubscriptionByCodeQuery); err != nil {
 		return fmt.Errorf("failed to prepare getSubscriptionByCode statement: %w", err)
 	}
-	if s.GetAllSubscriptionsStmt, err = s.db.Prepare(getAllSubscriptionsQuery); err != nil {
+	if s.getAllSubscriptionsStmt, err = s.db.Prepare(getAllSubscriptionsQuery); err != nil {
 		return fmt.Errorf("failed to prepare getAllSubscriptions statement: %w", err)
+	}
+	if s.getAllSubscriptionsCount, err = s.db.Prepare(getAllSubscriptionsCountQuery); err != nil {
+		return fmt.Errorf("failed to prepare getAllSubscriptionsCount statement: %w", err)
 	}
 	if s.updateSubscriptionStmt, err = s.db.Prepare(updateSubscriptionQuery); err != nil {
 		return fmt.Errorf("failed to prepare updateSubscription statement: %w", err)
@@ -148,8 +158,11 @@ func (s *Store) Close() error {
 	if err := s.getSubscriptionByCodeStmt.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to close getSubscriptionByCode statement: %w", err))
 	}
-	if err := s.GetAllSubscriptionsStmt.Close(); err != nil {
+	if err := s.getAllSubscriptionsStmt.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to close getAllSubscriptions statement: %w", err))
+	}
+	if err := s.getAllSubscriptionsCount.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to close getAllSubscriptionsCount statement: %w", err))
 	}
 	if err := s.updateSubscriptionStmt.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to close updateSubscription statement: %w", err))
@@ -197,15 +210,6 @@ func (s *Store) CreateSubscription(ctx context.Context, subscription types.Subsc
 	}
 
 	return subscription, nil
-}
-
-// isPgDuplicateKeyError checks if the error is a PostgreSQL unique violation
-func isPgDuplicateKeyError(err error) bool {
-	pqErr, ok := err.(*pq.Error)
-	if !ok {
-		return false
-	}
-	return pqErr.Code == "23505" // unique_violation error code
 }
 
 // GetSubscriptionByID retrieves a subscription by its ID
@@ -278,6 +282,42 @@ func (s *Store) GetSubscriptionByCode(ctx context.Context, code string) (types.S
 	return subscription, nil
 }
 
+// Get all subscriptions
+func (s *Store) GetAllSubscriptions(ctx context.Context, sort string, limit, offset int) ([]types.Subscription, error) {
+	rows, err := s.getAllSubscriptionsStmt.Query(sort, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all subscriptions: %w", err)
+	}
+	defer rows.Close()
+
+	var subscriptions []types.Subscription
+	for rows.Next() {
+		var subscription types.Subscription
+		err := rows.Scan(
+			&subscription.SubscriptionID,
+			&subscription.Code,
+			&subscription.Plan,
+			&subscription.Description,
+			&subscription.Price,
+			&subscription.DataLimit,
+			&subscription.Validity,
+			&subscription.CreatedAt,
+			&subscription.UpdatedAt,
+		)
+		if err != nil {
+			fmt.Printf("Scan error: %v\n", err)
+			return nil, fmt.Errorf("failed to scan subscription: %w", err)
+		}
+		subscriptions = append(subscriptions, subscription)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate over subscriptions: %w", err)
+	}
+
+	return subscriptions, nil
+}
+
 // Update the subscription
 func (s *Store) UpdateSubscription(ctx context.Context, subscription types.Subscription) (types.Subscription, error) {
 	err := s.updateSubscriptionStmt.QueryRow(
@@ -318,4 +358,24 @@ func (s *Store) DeleteSubscription(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// Get all subscription count
+func (s *Store) GetAllSubscriptionsCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.getAllSubscriptionsCount.QueryRow().Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get all subscriptions count: %w", err)
+	}
+
+	return count, nil
+}
+
+// isPgDuplicateKeyError checks if the error is a PostgreSQL unique violation
+func isPgDuplicateKeyError(err error) bool {
+	pqErr, ok := err.(*pq.Error)
+	if !ok {
+		return false
+	}
+	return pqErr.Code == "23505" // unique_violation error code
 }
