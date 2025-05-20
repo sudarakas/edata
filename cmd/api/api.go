@@ -46,12 +46,23 @@ func NewAPIServer(config Config, db *sql.DB) *APIServer {
 		router: router,
 		server: &http.Server{
 			Addr:         config.Addr,
-			Handler:      router,
+			Handler:      securityHeadersMiddleware(router),
 			ReadTimeout:  config.ReadTimeout,
 			WriteTimeout: config.WriteTimeout,
 			IdleTimeout:  config.IdleTimeout,
 		},
 	}
+}
+
+// securityHeadersMiddleware adds common security headers to each response.
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none';")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // setupRoutes initializes all route handlers

@@ -27,7 +27,7 @@ func initConfig() Config {
 		log.Fatal("Error loading .env file")
 	}
 
-	return Config{
+	cfg := Config{
 		PublicHost: getEnv("PUBLIC_HOST", "http://localhost"),
 		Port:       getEnv("PORT", "8080"),
 		DBUser:     getEnv("DB_USER", "postgres"),
@@ -36,8 +36,15 @@ func initConfig() Config {
 		DBPort:     getEnv("DB_PORT", "5432"),
 		DBName:     getEnv("DB_NAME", "postgres"),
 		DBSecure:   getEnv("DB_SECURE", "disable"),
-		JWTSECRET:  getEnv("JWT_SECRET", "secret"),
+		JWTSECRET:  getEnv("JWT_SECRET", ""), // Removed default "secret"
 	}
+
+	// Check for JWT_SECRET
+	if cfg.JWTSECRET == "" || cfg.JWTSECRET == "secret" {
+		log.Fatal("CRITICAL: JWT_SECRET is not set or is weak. Please provide a strong secret in your environment configuration.")
+	}
+
+	return cfg
 }
 
 func getEnv(key, fallback string) string {

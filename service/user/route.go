@@ -94,7 +94,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Check if the user exists
 	existingUser, _ := h.store.GetUserByEmail(ctx, payload.Email)
 	if existingUser.ID != "" {
-		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("user already exists"))
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("Registration failed. Please check your input and try again."))
 		return
 	}
 
@@ -135,16 +135,8 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetUserByCondition(w http.ResponseWriter, r *http.Request) {
-	// Check if email query parameter exists
-	email := r.URL.Query().Get("email")
-
-	if email != "" {
-		// If email is provided, fetch user by email
-		h.handleGetUserByEmail(w, r)
-	} else {
-		// Otherwise, fetch user by ID or default logic
-		h.handleGetUser(w, r)
-	}
+	// Fetch user by ID using JWT claims
+	h.handleGetUser(w, r)
 }
 
 func (h *Handler) handleGetUser(w http.ResponseWriter, r *http.Request) {
